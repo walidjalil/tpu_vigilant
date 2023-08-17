@@ -63,7 +63,7 @@ lr = 0.001
 transform = transforms.ToTensor()
 train_data = datasets.MNIST('./data', train=True, transform=transform)
 
-def train():
+def train(index):
     device = xm.xla_device()
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
     mp_device_loader = pl.MpDeviceLoader(train_loader, device)
