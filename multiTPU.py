@@ -99,7 +99,7 @@ if __name__ == '__main__':
     flags = {
         'batch_size': 128,
         'test_batch_size': 128,
-        'lr': 0.05,
+        'lr': 0.1,
         'epochs': 20,
         'seed': 1234,
     }
