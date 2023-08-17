@@ -75,7 +75,7 @@ def train(index):
     model.train()
     for epoch in range(epochs):
         train_loss = 0
-        for batch_idx, (data, _) in enumerate(train_loader):
+        for batch_idx, (data, _) in enumerate(mp_device_loader):
             data = data.to(device)
             optimizer.zero_grad()
             recon_batch, mu, logvar = model(data)
