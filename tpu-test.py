@@ -13,8 +13,8 @@ from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
 import torch_xla.core.xla_model as xm
-
-device = xm.xla_device()
+import torch_xla.distributed.parallel_loader as pl
+import torch_xla.distributed.xla_multiprocessing as xmp
 
 # VAE model
 class VAE(nn.Module):
@@ -61,26 +61,31 @@ lr = 0.001
 
 # MNIST Data
 transform = transforms.ToTensor()
-train_data = datasets.MNIST('./data', train=True, download=True, transform=transform)
-train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+train_data = datasets.MNIST('./data', train=True, transform=transform)
 
-# Model and Optimizer
-model = VAE().to(device)
-optimizer = optim.Adam(model.parameters(), lr=lr)
+def train():
+    device = xm.xla_device()
+    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+    mp_device_loader = pl.MpDeviceLoader(train_loader, device)
+    # Model and Optimizer
+    model = VAE().to(device)
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    
+    # Training Loop
+    model.train()
+    for epoch in range(epochs):
+        train_loss = 0
+        for batch_idx, (data, _) in enumerate(train_loader):
+            data = data.to(device)
+            optimizer.zero_grad()
+            recon_batch, mu, logvar = model(data)
+            loss = loss_function(recon_batch, data, mu, logvar)
+            loss.backward()
+            train_loss += loss.item()
+            #xm.optimizer_step(optimizer, barrier=True) TEST BOTH WITH AND WITHOUT BARRIER
+            xm.optimizer_step(optimizer)
+    
+        print(f'Epoch: {epoch} \t Loss: {train_loss / len(train_loader.dataset)}')
 
-# Training Loop
-model.train()
-for epoch in range(epochs):
-    train_loss = 0
-    for batch_idx, (data, _) in enumerate(train_loader):
-        data = data.to(device)
-        optimizer.zero_grad()
-        recon_batch, mu, logvar = model(data)
-        loss = loss_function(recon_batch, data, mu, logvar)
-        loss.backward()
-        train_loss += loss.item()
-        #xm.optimizer_step(optimizer, barrier=True)
-        optimizer.step()
-        xm.mark_step()
-
-    print(f'Epoch: {epoch} \t Loss: {train_loss / len(train_loader.dataset)}')
+if __name__ == '__main__':
+  xmp.spawn(train, args=())
