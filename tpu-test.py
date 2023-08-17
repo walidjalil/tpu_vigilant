@@ -7,9 +7,75 @@ Created on Thu Aug 17 18:51:02 2023
 """
 
 import torch
-import torch_xla.core.xla_model as xm
+import torch.nn as nn
+import torch.optim as optim
+from torchvision import datasets, transforms
+from torch.utils.data import DataLoader
+import torch.nn.functional as F
 
-dev = xm.xla_device()
-t1 = torch.randn(3,3,device=dev)
-t2 = torch.randn(3,3,device=dev)
-print(t1 + t2)
+# VAE model
+class VAE(nn.Module):
+    def __init__(self):
+        super(VAE, self).__init__()
+
+        # Encoder
+        self.fc1 = nn.Linear(784, 400)
+        self.fc21 = nn.Linear(400, 20) # mean
+        self.fc22 = nn.Linear(400, 20) # logvariance
+
+        # Decoder
+        self.fc3 = nn.Linear(20, 400)
+        self.fc4 = nn.Linear(400, 784)
+
+    def encode(self, x):
+        h1 = F.relu(self.fc1(x))
+        return self.fc21(h1), self.fc22(h1)
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5*logvar)
+        eps = torch.randn_like(std)
+        return mu + eps*std
+
+    def decode(self, z):
+        h3 = F.relu(self.fc3(z))
+        return torch.sigmoid(self.fc4(h3))
+
+    def forward(self, x):
+        mu, logvar = self.encode(x.view(-1, 784))
+        z = self.reparameterize(mu, logvar)
+        return self.decode(z), mu, logvar
+
+# Loss function
+def loss_function(recon_x, x, mu, logvar):
+    BCE = F.binary_cross_entropy(recon_x, x.view(-1, 784), reduction='sum')
+    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    return BCE + KLD
+
+# Hyperparameters
+batch_size = 128
+epochs = 10
+lr = 0.001
+
+# MNIST Data
+transform = transforms.ToTensor()
+train_data = datasets.MNIST('./data', train=True, download=True, transform=transform)
+train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+
+# Model and Optimizer
+model = VAE().to(device)
+optimizer = optim.Adam(model.parameters(), lr=lr)
+
+# Training Loop
+model.train()
+for epoch in range(epochs):
+    train_loss = 0
+    for batch_idx, (data, _) in enumerate(train_loader):
+        data = data.to(device)
+        optimizer.zero_grad()
+        recon_batch, mu, logvar = model(data)
+        loss = loss_function(recon_batch, data, mu, logvar)
+        loss.backward()
+        train_loss += loss.item()
+        optimizer.step()
+
+    print(f'Epoch: {epoch} \t Loss: {train_loss / len(train_loader.dataset)}')
