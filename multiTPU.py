@@ -22,7 +22,7 @@ class ComplexCNN(nn.Module):
         self.bn3 = nn.BatchNorm2d(128)
         self.dropout1 = nn.Dropout2d(0.25)
         self.dropout2 = nn.Dropout2d(0.5)
-        self.fc1 = nn.Linear(128 * 3 * 3, 256)
+        self.fc1 = nn.Linear(128 * 5 * 5, 256)
         self.fc2 = nn.Linear(256, 10)
 
     def forward(self, x):
