@@ -6,7 +6,7 @@ Created on Fri Aug 18 00:03:45 2023
 @author: walidajalil
 """
 
-import args_parse
+import argparse
 from torch_xla import runtime as xr
 
 MODEL_OPTS = {
@@ -18,7 +18,7 @@ MODEL_OPTS = {
     },
 }
 
-FLAGS = args_parse.parse_common_options(
+FLAGS = argparse.parse_common_options(
     datadir='/data/MNIST',
     batch_size=128,
     momentum=0.5,
