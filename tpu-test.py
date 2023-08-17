@@ -12,6 +12,9 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
+import torch_xla.core.xla_model as xm
+
+device = xm.xla_device()
 
 # VAE model
 class VAE(nn.Module):
@@ -76,6 +79,6 @@ for epoch in range(epochs):
         loss = loss_function(recon_batch, data, mu, logvar)
         loss.backward()
         train_loss += loss.item()
-        optimizer.step()
+        xm.optimizer_step(optimizer, barrier=True)
 
     print(f'Epoch: {epoch} \t Loss: {train_loss / len(train_loader.dataset)}')
