@@ -84,7 +84,7 @@ def test(model, device, test_loader):
 def _mp_fn(rank, flags):
     torch.manual_seed(flags['seed'])
     device = xm.xla_device()
-    model = ComplexCNN()().to(device)
+    model = ComplexCNN().to(device)
     batch_size = flags['batch_size']
     test_batch_size = flags['test_batch_size']
     lr = flags['lr']
