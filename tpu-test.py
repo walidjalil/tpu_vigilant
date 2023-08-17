@@ -79,6 +79,8 @@ for epoch in range(epochs):
         loss = loss_function(recon_batch, data, mu, logvar)
         loss.backward()
         train_loss += loss.item()
-        xm.optimizer_step(optimizer, barrier=True)
+        #xm.optimizer_step(optimizer, barrier=True)
+        optimizer.step()
+        xm.mark_step()
 
     print(f'Epoch: {epoch} \t Loss: {train_loss / len(train_loader.dataset)}')
