@@ -37,6 +37,7 @@ class ComplexCNN(nn.Module):
         x = self.bn3(x)
         x = F.relu(x)
         x = F.max_pool2d(x, 2)
+        print(x.shape)
         x = self.dropout1(x)
         x = torch.flatten(x, 1)
         x = self.fc1(x)
