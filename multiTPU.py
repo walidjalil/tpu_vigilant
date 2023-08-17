@@ -79,5 +79,5 @@ def _mp_fn(rank, flags):
     train(rank, world_size)
 
 if __name__ == '__main__':
-    flags = {'world_size': 8}
-    xmp.spawn(_mp_fn, args=(flags,), nprocs=flags['world_size'])
+    #flags = {'world_size': 8}
+    xmp.spawn(_mp_fn, nprocs=8)
