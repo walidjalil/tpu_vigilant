@@ -99,8 +99,8 @@ if __name__ == '__main__':
     flags = {
         'batch_size': 128,
         'test_batch_size': 128,
-        'lr': 0.01,
-        'epochs': 10,
+        'lr': 0.05,
+        'epochs': 20,
         'seed': 1234,
     }
     xmp.spawn(_mp_fn, args=(flags,), nprocs=8, start_method='fork')
