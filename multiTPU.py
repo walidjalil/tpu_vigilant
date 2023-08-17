@@ -32,6 +32,7 @@ class Net(nn.Module):
 # Define train and test functions
 def train(model, device, train_loader, optimizer, epoch):
     model.train()
+    dataset_length = len(train_loader.dataset)  # Save the dataset length before wrapping
     train_loader = pl.MpDeviceLoader(train_loader, device)  # Parallel loader
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
@@ -41,12 +42,14 @@ def train(model, device, train_loader, optimizer, epoch):
         loss.backward()
         xm.optimizer_step(optimizer, barrier=True)
         if batch_idx % 10 == 0:
-            print('Train Epoch: {} [{}/{}]\tLoss: {:.6f}'.format(epoch, batch_idx * len(data), len(train_loader.dataset), loss.item()))
+            print('Train Epoch: {} [{}/{}]\tLoss: {:.6f}'.format(epoch, batch_idx * len(data), dataset_length, loss.item()))
+
 
 def test(model, device, test_loader):
     model.eval()
     test_loss = 0
     correct = 0
+    dataset_length = len(test_loader.dataset)  # Save the dataset length before wrapping
     test_loader = pl.MpDeviceLoader(test_loader, device)  # Parallel loader
     with torch.no_grad():
         for data, target in test_loader:
@@ -55,6 +58,10 @@ def test(model, device, test_loader):
             test_loss += F.nll_loss(output, target, reduction='sum').item()
             pred = output.argmax(dim=1, keepdim=True)
             correct += pred.eq(target.view_as(pred)).sum().item()
+
+    test_loss /= dataset_length
+    print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(test_loss, correct, dataset_length, 100. * correct / dataset_length))
+
 
 # Training entry point
 def _mp_fn(rank, flags):
