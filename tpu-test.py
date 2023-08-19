@@ -1,84 +1,60 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Aug 17 18:51:02 2023
-
-@author: walidajalil
-"""
-
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from torchvision import datasets, transforms
-from torch.utils.data import DataLoader
 import torch.nn.functional as F
+import torch_xla
 import torch_xla.core.xla_model as xm
+import torch_xla.distributed.xla_multiprocessing as xmp
+import torch_xla.distributed.parallel_loader as pl
 
-device = xm.xla_device()
-
-# VAE model
-class VAE(nn.Module):
+# Define a simple feedforward neural network
+class SimpleNN(nn.Module):
     def __init__(self):
-        super(VAE, self).__init__()
-
-        # Encoder
-        self.fc1 = nn.Linear(784, 400)
-        self.fc21 = nn.Linear(400, 20) # mean
-        self.fc22 = nn.Linear(400, 20) # logvariance
-
-        # Decoder
-        self.fc3 = nn.Linear(20, 400)
-        self.fc4 = nn.Linear(400, 784)
-
-    def encode(self, x):
-        h1 = F.relu(self.fc1(x))
-        return self.fc21(h1), self.fc22(h1)
-
-    def reparameterize(self, mu, logvar):
-        std = torch.exp(0.5*logvar)
-        eps = torch.randn_like(std)
-        return mu + eps*std
-
-    def decode(self, z):
-        h3 = F.relu(self.fc3(z))
-        return torch.sigmoid(self.fc4(h3))
+        super(SimpleNN, self).__init__()
+        self.fc1 = nn.Linear(784, 256)
+        self.fc2 = nn.Linear(256, 64)
+        self.fc3 = nn.Linear(64, 10)
 
     def forward(self, x):
-        mu, logvar = self.encode(x.view(-1, 784))
-        z = self.reparameterize(mu, logvar)
-        return self.decode(z), mu, logvar
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
 
-# Loss function
-def loss_function(recon_x, x, mu, logvar):
-    BCE = F.binary_cross_entropy(recon_x, x.view(-1, 784), reduction='sum')
-    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    return BCE + KLD
+# Define the training function that will run on each TPU core
+def train(index, flags):
+    # Create some random training data
+    train_data = torch.rand(5000, 784)
+    train_labels = torch.randint(0, 10, (5000,))
 
-# Hyperparameters
-batch_size = 128
-epochs = 10
-lr = 0.001
+    # Acquire the corresponding TPU core
+    device = xm.xla_device()
 
-# MNIST Data
-transform = transforms.ToTensor()
-train_data = datasets.MNIST('./data', train=True, download=True, transform=transform)
-train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+    # Create the network, loss function, and optimizer
+    model = SimpleNN().to(device)
+    loss_fn = nn.CrossEntropyLoss()
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
 
-# Model and Optimizer
-model = VAE().to(device)
-optimizer = optim.Adam(model.parameters(), lr=lr)
+    # Wrap the training data in a ParallelLoader
+    train_loader = torch.utils.data.TensorDataset(train_data, train_labels)
+    train_loader = torch.utils.data.DataLoader(train_loader, batch_size=128, shuffle=True)
+    train_loader = pl.MpDeviceLoader(train_loader, device)
 
-# Training Loop
-model.train()
-for epoch in range(epochs):
-    train_loss = 0
-    for batch_idx, (data, _) in enumerate(train_loader):
-        data = data.to(device)
-        optimizer.zero_grad()
-        recon_batch, mu, logvar = model(data)
-        loss = loss_function(recon_batch, data, mu, logvar)
-        loss.backward()
-        train_loss += loss.item()
-        xm.optimizer_step(optimizer, barrier=True)
+    # Training loop
+    for epoch in range(25):
+        for data, target in train_loader:
+            optimizer.zero_grad()
+            output = model(data)
+            loss = loss_fn(output, target)
+            loss.backward()
+            xm.optimizer_step(optimizer)
+            xm.mark_step()
 
-    print(f'Epoch: {epoch} \t Loss: {train_loss / len(train_loader.dataset)}')
+        print("Epoch {} loss: {}".format(epoch, loss.item()))
+
+def _mp_fn(index, flags):
+    train(index, flags)
+
+if __name__ == '__main__':
+    flags = {}
+    xmp.spawn(_mp_fn, args=(flags,), nprocs=8, start_method='fork')
+
